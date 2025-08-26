@@ -33,3 +33,40 @@ button:hover {
 .result { margin-top: 20px; }
 .rec-box { background: #fafafa; padding: 12px; border-radius: 6px; }
 .error { color: #c00; margin-top: 12px; }
+.search-result-item {
+    display: flex; /* アイテムを横並びにする */
+    align-items: center; /* 垂直方向中央揃え */
+    padding: 10px;
+    border-bottom: 1px solid #333; /* 区切り線 */
+    cursor: pointer; /* クリック可能であることを示す */
+    background-color: #282828; /* 背景色 */
+}
+
+.search-result-item:hover {
+    background-color: #383838; /* ホバー時の背景色 */
+}
+
+/* アルバムアートのスタイル */
+.album-art {
+    width: 64px;  /* ここで画像の幅を固定 */
+    height: 64px; /* ここで画像の高さを固定 */
+    object-fit: cover; /* 画像が枠内に収まるように調整 */
+    margin-right: 10px;
+    border-radius: 4px; /* 角を少し丸くする */
+}
+
+/* トラック情報のスタイル */
+.track-info {
+    display: flex;
+    flex-direction: column; /* 曲名とアーティスト名を縦並びにする */
+}
+
+.track-name {
+    font-weight: bold;
+    color: #fff; /* 曲名の文字色 */
+}
+
+.artist-name {
+    font-size: 0.9em;
+    color: #b3b3b3; /* アーティスト名の文字色 */
+}

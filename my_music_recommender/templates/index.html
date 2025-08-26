@@ -10,11 +10,11 @@
     <h1>音楽推薦デモ</h1>
     <form method="post">
       <label for="track_name">曲名</label>
-      <input type="text" id="track_name" name="track_name" placeholder="例: わかってないよ" />
-      <label for="artist_name">アーティスト名</label>
-      <input type="text" id="artist_name" name="artist_name" placeholder="例: Wurts" />
-      <button type="submit">おすすめを出す</button>
+      <input type="text" id="track_name" name="track_name" autocomplete="off" />
+      <input type="hidden" id="track_id" name="track_id" />
+      <button type="submit" id="submit_button" disabled>おすすめを出す</button>
     </form>
+    <div id="search-results"></div>
 
     {% if error %}
       <div class="error">{{ error }}</div>
@@ -29,5 +29,59 @@
       </div>
     {% endif %}
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const trackNameInput = document.getElementById('track_name');
+      const trackIdInput = document.getElementById('track_id');
+      const submitButton = document.getElementById('submit_button');
+      const searchResultsDiv = document.getElementById('search-results');
+      let timeout = null;
+
+      trackNameInput.addEventListener('keyup', function() {
+        clearTimeout(timeout);
+        const query = this.value;
+
+        if (query.length < 2) {
+          searchResultsDiv.innerHTML = '';
+          submitButton.disabled = true;
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          fetch(`/search_track?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+              searchResultsDiv.innerHTML = '';
+              if (data.tracks && data.tracks.length > 0) {
+                data.tracks.forEach(track => {
+                  const trackElement = document.createElement('div');
+                  trackElement.className = 'search-result-item';
+                  trackElement.innerHTML = `
+                    <img src="${track.album_art || 'https://via.placeholder.com/64'}" alt="${track.name}" class="album-art">
+                    <div class="track-info">
+                      <span class="track-name">${track.name}</span>
+                      <span class="artist-name">${track.artist}</span>
+                    </div>
+                  `;
+                  trackElement.addEventListener('click', () => {
+                    trackNameInput.value = `${track.name} - ${track.artist}`;
+                    trackIdInput.value = track.id;
+                    searchResultsDiv.innerHTML = '';
+                    submitButton.disabled = false;
+                  });
+                  searchResultsDiv.appendChild(trackElement);
+                });
+              } else {
+                searchResultsDiv.innerHTML = '<div class="no-results">曲が見つかりませんでした。</div>';
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              searchResultsDiv.innerHTML = '<div class="no-results">検索中にエラーが発生しました。</div>';
+            });
+        }, 300); // 検索リクエストを送るまでの時間（ミリ秒）
+      });
+    });
+  </script>
 </body>
 </html>

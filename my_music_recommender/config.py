@@ -1,11 +1,10 @@
 import os
 
 # Spotify (Client Credentials flow)
-SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID", "")
-SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET", "")
+SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID", "c0146d0eab3742b7bbf89c09c0e5588e")
+SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET", "58c0b49dafaf4757bc9145c6105afd00")
 SPOTIPY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI", "http://localhost:8888/callback")
-SPOTIPY_CLIENT_ID = "あなたのSpotify Client ID"
-SPOTIPY_CLIENT_SECRET = "あなたのSpotify Client Secret"
+
 # OpenAI (or other LLM)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 

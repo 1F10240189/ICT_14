@@ -1,10 +1,13 @@
+# spotify_service.py
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import config
 import requests
 import os
 import json
-from typing import Optional
+from typing import Optional, Dict, List
+import numpy as np
+import urllib.parse
 
 class SpotifyService:
     def __init__(self):
@@ -15,36 +18,51 @@ class SpotifyService:
         auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
         self.sp = spotipy.Spotify(auth_manager=auth_manager)
 
-    def search_track_by_name(self, q: str) -> dict:
+    def search_track_by_name(self, q: str, limit: int = 5) -> List[Dict]:
         """
-        曲名や "artist - track" を投げると、見つかった最初のトラック情報を返す。
-        戻り値の例:
-        {
-          "id": "...",
-          "name": "...",
-          "artist": "...",
-          "preview_url": "...",  # 30秒プレビューがあれば
-          "features": {...}      # audio_features からの特徴量
-        }
+        曲名や "artist - track" を投げると、複数のトラック候補を返す。
         """
-        res = self.sp.search(q, type="track", limit=1)
-        items = res.get("tracks", {}).get("items", [])
-        if not items:
-            raise ValueError("曲が見つかりませんでした。")
-        t = items[0]
-        track_id = t["id"]
-        preview_url = t.get("preview_url")  # 30sのプレビューURL。無い場合あり
-        name = t["name"]
-        artist = t["artists"][0]["name"]
-        # audio features
-        af = self.sp.audio_features([track_id])[0] or {}
-        return {
-            "id": track_id,
-            "name": name,
-            "artist": artist,
-            "preview_url": preview_url,
-            "features": af
-        }
+        if not isinstance(q, str):
+            q = str(q)
+
+        # ★★★ 修正箇所: URLエンコードを削除し、Spotipyにそのまま渡す ★★★
+        # Spotipyはstr型のクエリを正しくエンコードするはずなので、手動エンコードが原因の場合がある
+        try:
+            res = self.sp.search(q, type="track", limit=limit)
+            items = res.get("tracks", {}).get("items", [])
+            if not items:
+                return []
+            
+            results = []
+            for t in items:
+                results.append({
+                    "id": t["id"],
+                    "name": t["name"],
+                    "artist": t["artists"][0]["name"],
+                    "album_art": t["album"]["images"][0]["url"] if t["album"]["images"] else None
+                })
+            return results
+        except spotipy.exceptions.SpotifyException as e:
+            raise RuntimeError(f"Spotify APIエラー: {e}") from e
+
+    def get_track_info(self, track_id: str) -> Dict:
+        """
+        トラックIDを使って、1曲の詳細情報を取得する。
+        """
+        try:
+            t = self.sp.track(track_id)
+            preview_url = t.get("preview_url")
+            af = self.sp.audio_features([track_id])[0] or {}
+            
+            return {
+                "id": track_id,
+                "name": t["name"],
+                "artist": t["artists"][0]["name"],
+                "preview_url": preview_url,
+                "features": af
+            }
+        except spotipy.exceptions.SpotifyException as e:
+            raise RuntimeError(f"Spotify APIエラー: {e}") from e
 
     def download_preview(self, preview_url: str, dst_path: str) -> str:
         """
@@ -52,35 +70,39 @@ class SpotifyService:
         """
         if not preview_url:
             raise ValueError("preview_urlがありません。")
-        r = requests.get(preview_url, stream=True, timeout=10)
-        r.raise_for_status()
-        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-        with open(dst_path, "wb") as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
-        return dst_path
+        try:
+            r = requests.get(preview_url, stream=True, timeout=10)
+            r.raise_for_status()
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+            with open(dst_path, "wb") as f:
+                for chunk in r.iter_content(1024):
+                    f.write(chunk)
+            return dst_path
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"ダウンロードエラー: {e}") from e
 
-    def features_to_vector(self, features: dict, dim=None):
+    def features_to_vector(self, features: Dict, dim: Optional[int] = None) -> np.ndarray:
         """
         Spotify が返す audio_features をベクトルにマッピングする簡易関数。
         VGGishベクトルが取得できないときのフォールバックとして使用。
         """
-        import numpy as np
         if dim is None:
-            import config
             dim = config.VECTOR_DIM
+        
         # 代表的な数値指標を抽出
-        keys = ["danceability","energy","speechiness","acousticness","instrumentalness","liveness","valence","tempo"]
+        keys = ["danceability", "energy", "speechiness", "acousticness", 
+                "instrumentalness", "liveness", "valence", "tempo"]
         vals = []
         for k in keys:
             v = features.get(k, 0.0)
-            # tempoはスケールが大きいので正規化
             if k == "tempo":
                 v = v / 200.0
             vals.append(v)
-        # パディングまたはランダムで埋めて固定長にする
+            
         arr = np.array(vals, dtype=float)
+        
         if arr.size >= dim:
             return arr[:dim]
-        pad = np.random.RandomState(0).rand(dim - arr.size) * 0.01
-        return np.concatenate([arr, pad])
+        else:
+            pad = np.random.RandomState(0).rand(dim - arr.size) * 0.01
+            return np.concatenate([arr, pad])
