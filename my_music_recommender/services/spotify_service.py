@@ -1,4 +1,3 @@
-# spotify_service.py
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import config
@@ -24,9 +23,7 @@ class SpotifyService:
         """
         if not isinstance(q, str):
             q = str(q)
-
-        # ★★★ 修正箇所: URLエンコードを削除し、Spotipyにそのまま渡す ★★★
-        # Spotipyはstr型のクエリを正しくエンコードするはずなので、手動エンコードが原因の場合がある
+        
         try:
             res = self.sp.search(q, type="track", limit=limit)
             items = res.get("tracks", {}).get("items", [])
@@ -52,7 +49,13 @@ class SpotifyService:
         try:
             t = self.sp.track(track_id)
             preview_url = t.get("preview_url")
-            af = self.sp.audio_features([track_id])[0] or {}
+            
+            # ★★★ 修正箇所：audio_featuresの取得に失敗した場合のエラー処理を追加 ★★★
+            try:
+                af = self.sp.audio_features([track_id])[0] or {}
+            except spotipy.exceptions.SpotifyException as e:
+                print(f"警告: audio_featuresの取得に失敗しました。{e}")
+                af = {} # 失敗した場合は空の辞書を返す
             
             return {
                 "id": track_id,
