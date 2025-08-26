@@ -1,1 +1,33 @@
-<!-- HTML�e���v���[�g�t�@�C�� -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Music Recommender (Demo)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>音楽推薦デモ</h1>
+    <form method="post">
+      <label for="track_name">曲名</label>
+      <input type="text" id="track_name" name="track_name" placeholder="例: わかってないよ" />
+      <label for="artist_name">アーティスト名</label>
+      <input type="text" id="artist_name" name="artist_name" placeholder="例: Wurts" />
+      <button type="submit">おすすめを出す</button>
+    </form>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if recommendation %}
+      <div class="result">
+        <h2>推薦結果</h2>
+        <div class="rec-box">
+          {{ recommendation | safe }}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

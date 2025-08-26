@@ -1,0 +1,10 @@
+Flask>=2.0
+numpy
+librosa
+soundfile
+scikit-learn
+requests
+spotipy
+openai
+faiss-cpu  # optional: 高速なベクトル検索。環境に合わなければ削除してscikit-learnが使用されます
+gunicorn   # 本番で使うなら

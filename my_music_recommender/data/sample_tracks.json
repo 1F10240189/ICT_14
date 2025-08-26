@@ -1,0 +1,8 @@
+[
+  {
+    "id": "local_demo_1",
+    "name": "sample_audio",
+    "artist": "demo",
+    "audio_path": "data/sample_audio.wav"
+  }
+]
