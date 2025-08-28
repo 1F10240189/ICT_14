@@ -1,7 +1,6 @@
-# app.py (最終修正版)
+# app.py (ハイブリッド検索対応・最終完成版)
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from services.spotify_service import SpotifyService
-from services.vggish_service import extract_audio_vector
 from services.vector_db_service import VectorDB
 from services.ai_agent_service import generate_recommendation_text
 import config
@@ -10,6 +9,7 @@ import numpy as np
 app = Flask(__name__)
 spotify = SpotifyService()
 vector_db = VectorDB(config.COMBINED_VECTORS_NPY, config.VECTORS_META)
+DB_META_DICT = {item['id']: idx for idx, item in enumerate(vector_db.meta or [])}
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -23,62 +23,54 @@ def index():
         try:
             track_info = spotify.get_track_info(track_id)
         except Exception as e:
-            error = f"Spotifyから曲情報の取得に失敗しました: {e}"
-            track_info = None
+            return render_template("index.html", error=f"Spotifyから曲情報の取得に失敗しました: {e}")
 
-        if track_info:
-            # 1. Spotify特徴量ベクトルを作成
-            spotify_vec = spotify.features_to_vector(track_info.get("features", {}), dim=config.VECTOR_DIM)
+        if not track_info:
+            return render_template("index.html", error="曲情報が見つかりませんでした。")
 
-            # 2. 音声ベクトル作成を試行
-            vggish_vec = None
+        results = []
+        
+        # --- ▼▼▼ ハイブリッド検索ロジック ▼▼▼ ---
+        # 1. ローカルDBに曲が存在する場合 -> VGGishを含む高精度な「完全一致検索」
+        if track_id in DB_META_DICT:
+            mode_message = "【高精度モード】VGGishの音声分析情報を含むベクトルで推薦します。"
+            print(f"情報: ローカルDB内の曲 '{track_info['name']}' が選択されました。{mode_message}")
+            idx = DB_META_DICT[track_id]
+            query_vec = vector_db.vectors[idx]
+            results = vector_db.search_combined(query_vec, top_k=6)
+
+        # 2. ローカルDBにない曲の場合 -> VGGishを使わない「Spotify特徴量検索」
+        else:
+            if track_info.get("features"):
+                mode_message = "【通常モード】Spotifyの楽曲特徴のみで推薦します。（お客様の環境ではリアルタイム音声分析がブロックされるため）"
+                print(f"情報: 新しい曲 '{track_info['name']}' が選択されました。{mode_message}")
+                query_vec = spotify.features_to_vector(track_info["features"], dim=config.VECTOR_DIM)
+                results = vector_db.search_spotify_only(query_vec, top_k=6)
+            else:
+                error = "この曲は楽曲特徴量が取得できないため、推薦を生成できませんでした。"
+        # --- ▲▲▲ ハイブリッド検索ロジックここまで ▲▲▲ ---
+
+        if not error and not results:
+            error = "類似曲が見つかりませんでした。"
+        elif results:
             try:
-                audio_source = track_info.get("preview_url")
-                if audio_source:
-                    vggish_vec = extract_audio_vector(audio_source, dim=config.VGGISH_FEATURE_DIM)
-                    print("成功: リアルタイム音声解析に成功しました。")
+                # 検索結果から自分自身を除外
+                final_results = [r for r in results if r.get("id") != track_id][:5]
+                if final_results:
+                    recommendation = generate_recommendation_text(track_info, final_results)
                 else:
-                    print("情報: この曲にはプレビュー音源がありません。")
+                    error = "類似曲が見つかりませんでした。（検索結果が選択した曲自身のみでした）"
             except Exception as e:
-                # ★★★ 修正箇所 ★★★
-                # ユーザーにエラーを通知し、何が起きているかを明確にする
-                error = "警告: リアルタイムでの音声解析に失敗しました。PC環境によりダウンロードがブロックされた可能性があります。Spotify特徴量のみで推薦を続行します。"
-                print(f"{error} (詳細: {e})")
-            
-            # 音声ベクトルが取得できなかった場合は、ゼロベクトルで埋める
-            if vggish_vec is None:
-                vggish_vec = np.zeros(config.VGGISH_FEATURE_DIM, dtype=np.float32)
-
-            # 3. ベクトルを結合
-            combined_vec = np.concatenate([spotify_vec, vggish_vec])
-
-            # 4. データベース検索と推薦文生成
-            try:
-                results = vector_db.search(combined_vec, top_k=6)
-                results = [r for r in results if r.get("id") != track_id][:5] # 自分自身を除外
-                
-                if not results:
-                     # 既存のエラーメッセージと競合しないように、エラーがない場合のみ設定
-                     if not error:
-                        error = "類似曲が見つかりませんでした。"
-                else:
-                    recommendation = generate_recommendation_text(track_info, results)
-
-            except Exception as e:
-                error = f"推薦の生成中にエラーが発生しました: {e}"
-                recommendation = None
+                error = f"AIによる推薦文の生成中にエラーが発生しました: {e}"
 
     return render_template("index.html", recommendation=recommendation, error=error)
 
 @app.route("/search_track", methods=["GET"])
 def search_track():
     q = request.args.get("q", "").strip()
-    if not q:
-        return jsonify({"tracks": []})
-    
+    if not q: return jsonify({"tracks": []})
     try:
-        results = spotify.search_track_by_name(q, limit=5)
-        return jsonify({"tracks": results})
+        return jsonify({"tracks": spotify.search_track_by_name(q, limit=5)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
